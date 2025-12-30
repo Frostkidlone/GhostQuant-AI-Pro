@@ -1,49 +1,105 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import Optional, List
+from datetime import datetime
 
-app = FastAPI(title="GhostQuant-AI-Pro Bot")
+app = FastAPI(title="GhostQuant AI Pro")
 
-# Dummy storage for orders and positions
+# --------------------
+# GLOBAL STATE (SIMULATION)
+# --------------------
+STARTING_BALANCE = 1.0  # 1 ETH
+balance = STARTING_BALANCE
 positions = []
-strategies = [
-    {"name": "MeanReversion", "description": "Buys low, sells high"},
-    {"name": "Momentum", "description": "Follows trends"},
-    {"name": "Scalping", "description": "Quick trades to capture small price movements"}
-]
+trade_log = []
 
-# Pydantic models
-class Order(BaseModel):
+# --------------------
+# MODELS
+# --------------------
+class TradeRequest(BaseModel):
+    strategy: str
+    symbol: str = "ETH"
+    side: str  # buy or sell
+    price: float
+    quantity: float
+
+class TradeResult(BaseModel):
     strategy: str
     symbol: str
     side: str
+    price: float
     quantity: float
-    price: Optional[float] = None
+    pnl: float
+    timestamp: str
 
-class Position(BaseModel):
-    strategy: str
-    symbol: str
-    side: str
-    quantity: float
-    price: Optional[float] = None
+# --------------------
+# STRATEGIES
+# --------------------
+def mean_reversion(price):
+    return price < 2400
 
-# Health check endpoint
+def momentum(price):
+    return price > 2450
+
+def scalping(price):
+    return 2420 <= price <= 2440
+
+# --------------------
+# CORE LOGIC
+# --------------------
+def execute_trade(strategy, side, price, quantity):
+    global balance
+
+    cost = price * quantity
+    pnl = 0.0
+
+    if side == "buy" and balance >= cost:
+        balance -= cost
+        positions.append({
+            "strategy": strategy,
+            "price": price,
+            "quantity": quantity
+        })
+
+    elif side == "sell" and positions:
+        entry = positions.pop(0)
+        pnl = (price - entry["price"]) * quantity
+        balance += cost + pnl
+
+    trade = {
+        "strategy": strategy,
+        "symbol": "ETH",
+        "side": side,
+        "price": price,
+        "quantity": quantity,
+        "pnl": round(pnl, 6),
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+    trade_log.append(trade)
+    return trade
+
+# --------------------
+# API ENDPOINTS
+# --------------------
 @app.get("/health")
-async def health_check():
-    return {"status": "ok", "message": "Backend is running!"}
+def health():
+    return {"status": "running"}
 
-# Get available strategies
-@app.get("/strategies")
-async def get_strategies():
-    return {"strategies": strategies}
+@app.get("/balance")
+def get_balance():
+    return {"balance_eth": round(balance, 6)}
 
-# Place a new order
-@app.post("/order")
-async def place_order(order: Order):
-    positions.append(order.dict())
-    return {"status": "success", "order": order.dict()}
+@app.get("/trades")
+def get_trades():
+    return trade_log
 
-# Get current positions
-@app.get("/positions")
-async def get_positions():
-    return {"positions": positions}
+@app.post("/trade")
+def place_trade(req: TradeRequest):
+    trade = execute_trade(
+        strategy=req.strategy,
+        side=req.side,
+        price=req.price,
+        quantity=req.quantity
+    )
+    return trade

@@ -1,43 +1,29 @@
 import requests
+import time
 
 BASE_URL = "http://127.0.0.1:8000"
 
-print("Starting backend test for GhostQuant-AI-Pro bot...\n")
+demo_prices = [2380, 2410, 2435, 2460, 2440]
 
-# Health Check
-try:
-    r = requests.get(f"{BASE_URL}/health")
-    print("Health Check:", r.status_code, r.json())
-except Exception as e:
-    print("Health Check Error:", e)
+for price in demo_prices:
+    if price < 2400:
+        strategy = "MeanReversion"
+        side = "buy"
+    elif price > 2450:
+        strategy = "Momentum"
+        side = "sell"
+    else:
+        strategy = "Scalping"
+        side = "buy"
 
-# Available Strategies
-try:
-    r = requests.get(f"{BASE_URL}/strategies")
-    print("Available Strategies:", r.status_code, r.json())
-except Exception as e:
-    print("Available Strategies Error:", e)
+    payload = {
+        "strategy": strategy,
+        "side": side,
+        "price": price,
+        "quantity": 0.01
+    }
 
-# Place Order
-order_data = {
-    "strategy": "Scalping",
-    "symbol": "BTCUSDT",
-    "side": "buy",
-    "quantity": 0.001,
-    "price": None
-}
+    r = requests.post(f"{BASE_URL}/trade", json=payload)
+    print(r.json())
 
-try:
-    r = requests.post(f"{BASE_URL}/order", json=order_data)
-    print("Place Order:", r.status_code, r.json())
-except Exception as e:
-    print("Place Order Error:", e)
-
-# Current Positions
-try:
-    r = requests.get(f"{BASE_URL}/positions")
-    print("Current Positions:", r.status_code, r.json())
-except Exception as e:
-    print("Current Positions Error:", e)
-
-print("\nAll tests completed.")
+    time.sleep(1)
